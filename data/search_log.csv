@@ -1,0 +1,31 @@
+order,topic_id,query,searched_at_utc,attempts,n_results,filter_confirmed
+1,27,tradwife workout routine,2026-11-16T04:11:43.389Z,1,20,not logged (same URL)
+2,11,tradwife outfit ideas,2026-11-16T04:11:46.350Z,1,20,not logged (same URL)
+3,30,tradwife kitchen tour,2026-11-16T04:11:49.447Z,1,20,not logged (same URL)
+4,2,tradwife night routine,2026-11-16T04:11:52.518Z,1,20,not logged (same URL)
+5,16,tradwife toddler activities,2026-11-16T04:11:55.581Z,1,20,not logged (same URL)
+6,24,tradwife easy dinner recipes,2026-11-16T04:13:09.263Z,1,20,Videos+Relevance
+7,14,homeschooling,2026-11-16T04:13:12.335Z,1,20,Videos+Relevance
+8,7,baking from scratch,2026-11-16T04:13:26.175Z,4,20,Videos+Relevance
+9,22,laundry routine,2026-11-16T04:13:29.188Z,1,20,Videos+Relevance
+10,25,sewing for beginners,2026-11-16T04:13:32.222Z,1,20,Videos+Relevance
+11,4,cleaning routine,2026-11-16T04:13:41.858Z,1,20,Videos+Relevance
+12,23,home organization,2026-11-16T04:13:45.125Z,1,20,Videos+Relevance
+13,8,skincare routine,2026-11-16T04:13:48.420Z,1,20,Videos+Relevance
+14,19,dating advice,2026-11-16T04:13:51.526Z,1,20,Videos+Relevance
+15,21,budgeting tips,2026-11-16T04:13:54.616Z,1,20,Videos+Relevance
+16,5,tradwife grocery haul,2026-11-16T04:13:58.114Z,1,20,Videos+Relevance
+17,9,tradwife makeup tutorial,2026-11-16T04:14:01.148Z,1,20,Videos+Relevance
+18,28,self care routine,2026-11-16T04:14:04.293Z,1,20,Videos+Relevance
+19,26,tradwife knitting for beginners,2026-11-16T04:14:07.293Z,1,20,Videos+Relevance
+20,12,home decor,2026-11-16T04:14:10.605Z,1,20,Videos+Relevance
+21,3,meal prep,2026-11-16T04:14:14.060Z,1,20,Videos+Relevance
+22,18,marriage advice,2026-11-16T04:14:17.280Z,1,20,Videos+Relevance
+23,29,tradwife day in the life,2026-11-16T04:14:20.242Z,1,20,Videos+Relevance
+24,6,sourdough bread,2026-11-16T04:14:23.402Z,1,20,Videos+Relevance
+25,1,tradwife morning routine,2026-11-16T04:14:26.456Z,1,20,Videos+Relevance
+26,20,tradwife wedding planning,2026-11-16T04:14:29.867Z,1,20,Videos+Relevance
+27,17,tradwife pregnancy tips,2026-11-16T04:14:32.813Z,1,20,Videos+Relevance
+28,15,tradwife parenting tips,2026-11-16T04:14:35.914Z,1,20,Videos+Relevance
+29,10,tradwife hair care routine,2026-11-16T04:14:38.930Z,1,20,Videos+Relevance
+30,13,garden tour,2026-11-16T04:14:42.147Z,1,20,Videos+Relevance
