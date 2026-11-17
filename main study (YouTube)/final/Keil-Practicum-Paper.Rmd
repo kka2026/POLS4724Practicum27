@@ -1,7 +1,7 @@
 ---
 title: "The Effect of Conservative-Coded Content on Exposure to Explicit Political Media"
 subtitle: "`\\vspace{0.75em}`{=latex}POLSGU4724 | Practicum Experiment"
-author: "Katie Keil"
+author: "Katie Keil^[The pre-analysis plan can be found here: https://osf.io/zhs65.]"
 date: "`r Sys.Date()`"
 output: pdf_document
 papersize: letter
