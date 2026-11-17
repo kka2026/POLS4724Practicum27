@@ -1,0 +1,707 @@
+---
+title: "The Effect of Conservative-Coded Content on Exposure to Explicit Political Media"
+subtitle: "`\\vspace{0.75em}`{=latex}POLSGU4724 | Practicum Experiment"
+author: "Katie Keil"
+date: "`r Sys.Date()`"
+output: pdf_document
+papersize: letter
+geometry: margin=1in
+fontsize: 11pt
+indent: true
+header-includes:
+  - \usepackage{caption}
+  - \captionsetup[figure]{belowskip=-10pt}
+  - \usepackage{float}
+  - \setlength{\parskip}{0.6em}
+  - \usepackage{fvextra}
+  - \DefineVerbatimEnvironment{Highlighting}{Verbatim}{breaklines,breakanywhere,commandchars=\\\{\},baselinestretch=1}
+  - \RecustomVerbatimEnvironment{verbatim}{Verbatim}{breaklines,breakanywhere,baselinestretch=1}
+  - \usepackage{indentfirst}
+bibliography: references.bib
+csl: apsa.csl
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE,
+                      fig.align = "center",
+                      fig.width = 6, fig.height = 4, 
+                      out.width="100%",
+                      fig.pos="H", out.extra="",
+                      fig.topcaption = TRUE)
+
+library(randomizr)
+library(estimatr)
+library(ri2)
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(readxl)
+library(knitr)
+```
+
+```{r main-analysis}
+# ---- Main study: identical to the registered PAP Version 2 code ----
+set.seed(111626)
+
+topics <- c("morning routine", "night routine", "meal prep", "cleaning routine",
+            "grocery haul", "sourdough bread", "baking from scratch",
+            "skincare routine", "makeup tutorial", "hair care routine",
+            "outfit ideas", "home decor", "garden tour", "homeschooling",
+            "parenting tips", "toddler activities", "pregnancy tips",
+            "marriage advice", "dating advice", "wedding planning",
+            "budgeting tips", "laundry routine", "home organization",
+            "easy dinner recipes", "sewing for beginners",
+            "knitting for beginners", "workout routine", "self care routine",
+            "day in the life", "kitchen tour")
+
+n_units <- 30
+n_treat <- 15
+n_top   <- 20
+n_sims  <- 10000
+frame   <- "tradwife"
+
+Z <- complete_ra(N = n_units, m = n_treat)
+assignments <- data.frame(
+  topic_id = 1:n_units,
+  topic    = topics,
+  Z        = Z,
+  query    = ifelse(Z == 1, paste(frame, topics), topics),
+  order    = sample(1:n_units)
+) |>
+  arrange(order)
+
+results <- read.csv("search_results.csv")
+
+dat <- results |>
+  filter(rank <= n_top) |>
+  group_by(topic_id) |>
+  summarise(Y = sum(political), n_results = n(), .groups = "drop") |>
+  left_join(assignments, by = "topic_id") |>
+  mutate(condition = factor(Z, levels = 0:1,
+                            labels = c("Neutral query", "Conservative-coded query")))
+
+fit <- difference_in_means(Y ~ Z, data = dat)
+
+declaration <- declare_ra(N = n_units, m = n_treat)
+ri_h1 <- conduct_ri(Y ~ Z, declaration = declaration, assignment = "Z",
+                    sharp_hypothesis = 0, sims = n_sims, p = "upper",
+                    data = dat)
+
+results_table <- data.frame(
+  estimate  = fit$coefficients, std.error = fit$std.error,
+  conf.low  = fit$conf.low,     conf.high = fit$conf.high,
+  ri_p_one_tailed = summary(ri_h1)$upper_p_value
+)
+```
+
+```{r inline-values}
+fmt   <- function(x, d = 2) formatC(x, format = "f", digits = d)
+fmt_p <- function(p) ifelse(p == 0, paste0("< ", format(1 / n_sims, scientific = FALSE)),
+                            formatC(p, format = "f", digits = 4))
+
+# ---- Core estimates -------------------------------------------------
+ate    <- fmt(results_table$estimate)           # ATE (1.47)
+se     <- fmt(results_table$std.error)          # Neyman SE (0.39)
+ci_lo  <- fmt(results_table$conf.low)           # 95% CI lower (0.64)
+ci_hi  <- fmt(results_table$conf.high)          # 95% CI upper (2.29)
+p_ri   <- fmt_p(results_table$ri_p_one_tailed)  # one-tailed RI p (0.0002)
+p_t <- fmt_p(fit$p.value)   # two-tailed Welch t-test p (0.0016)
+
+# ---- Randomization inference details ----------------------------------
+ri_sims      <- ri_h1$sims_df$est_sim
+n_sims_fmt   <- format(n_sims, big.mark = ",")                               # "10,000"
+n_ri_extreme <- sum(ri_sims >= results_table$estimate - 1e-8)                # sims >= observed (2)
+ri_max_sim   <- fmt(max(ri_sims))                                            # largest simulated ATE
+
+# ---- Outcomes by condition --------------------------------------------
+y_c <- dat$Y[dat$Z == 0]; y_t <- dat$Y[dat$Z == 1]
+n_c      <- length(y_c);           n_t      <- length(y_t)         # topics per arm
+mean_c   <- fmt(mean(y_c));        mean_t   <- fmt(mean(y_t))      # means 
+sd_c     <- fmt(sd(y_c));          sd_t     <- fmt(sd(y_t))        # SDs 
+max_c    <- max(y_c);              max_t    <- max(y_t)            # max per topic
+sum_c    <- sum(y_c);              sum_t    <- sum(y_t)            # political results/arm
+any_c    <- sum(y_c > 0);          any_t    <- sum(y_t > 0)        # topics with >= 1
+pct_c    <- fmt(100 * sum_c / (n_c * n_top), 1)                    # % of control results
+pct_t    <- fmt(100 * sum_t / (n_t * n_top), 1)                    # % of treated results
+ratio_tc <- fmt(mean(y_t) / mean(y_c), 1)                          # treated mean / control 
+
+# ---- Data collection ---------------------------------------------------
+coding_log   <- read.csv("search_coding_log.csv")
+n_results    <- nrow(results)                                      # results coded
+n_pol        <- sum(results$political)                             # coded political
+pct_pol      <- fmt(100 * n_pol / n_results, 1)                    # % political overall 
+n_unique_vid <- length(unique(results$video_id))                   # distinct videos
+n_unique_pol <- length(unique(results$video_id[results$political == 1])) # pol vid 
+n_borderline <- sum(coding_log$borderline == 1)                    # flagged borderline
+times_et     <- as.POSIXct(results$searched_at, format = "%Y-%m-%dT%H:%M:%OSZ", tz = "UTC")
+search_date  <- format(min(times_et), "%B %d, %Y", tz = "America/New_York")   # November 15, 2026
+search_start <- format(min(times_et), "%I:%M %p", tz = "America/New_York")    # 11:11 PM (ET)
+search_end   <- format(max(times_et), "%I:%M %p", tz = "America/New_York")    # 11:14 PM (ET)
+search_mins  <- fmt(as.numeric(difftime(max(times_et), min(times_et), units = "mins")), 1)
+
+# ---- Exploratory sensitivity check -------------------------------------
+judgment_ids <- unique(results$video_id[grepl("borderline, coded 1", results$note)])
+fit_strict   <- results |>
+  mutate(political = ifelse(video_id %in% judgment_ids, 0, political)) |>
+  group_by(topic_id) |> summarise(Y = sum(political), .groups = "drop") |>
+  left_join(assignments, by = "topic_id") |>
+  difference_in_means(Y ~ Z, data = _)
+n_judgment   <- length(judgment_ids)                    # videos recoded
+ate_strict   <- fmt(fit_strict$coefficients)           
+se_strict    <- fmt(fit_strict$std.error)             
+ci_lo_strict <- fmt(fit_strict$conf.low)            
+ci_hi_strict <- fmt(fit_strict$conf.high)        
+
+# ---- Pilot (TikTok) -----------------------------------------------------
+# Names follow a{account}r{round}_{stat}, e.g. a1r1_likes = account 1, round 1
+pilot_assign <- read_excel("practicum_data.xlsx", sheet = "assignments") |> select(account, Z1, Z2)
+pilot_vid    <- read_excel("practicum_data.xlsx", sheet = "videos") |>
+  filter(account %in% c(1, 2), !is.na(likes)) |>
+  group_by(account, round) |>
+  summarise(n = n(), likes = mean(likes), comments = mean(comments),
+            followers = mean(followers), .groups = "drop")
+
+comma <- function(x) format(round(x), big.mark = ",")
+for (i in seq_len(nrow(pilot_vid))) {
+  k <- paste0("a", pilot_vid$account[i], "r", pilot_vid$round[i])
+  assign(paste0(k, "_n"),             pilot_vid$n[i])                          # videos
+  assign(paste0(k, "_likes"),         comma(pilot_vid$likes[i]))               # mean likes
+  assign(paste0(k, "_comments"),      comma(pilot_vid$comments[i]))            # mean comments
+  assign(paste0(k, "_followers"),     comma(pilot_vid$followers[i]))           # mean followers
+  assign(paste0(k, "_log_likes"),     fmt(log(pilot_vid$likes[i] + 1), 1))     # log(mean + 1)
+  assign(paste0(k, "_log_comments"),  fmt(log(pilot_vid$comments[i] + 1), 1))
+  assign(paste0(k, "_log_followers"), fmt(log(pilot_vid$followers[i] + 1), 1))
+}
+# Creates: a1r1_*, a1r2_*, a2r1_*, a2r2_*
+# Account 1: round 1 conservative, round 2 cockapoo. Account 2: both rounds conservative.
+
+# Pooled by content type (all liked videos from accounts 1-2)
+pilot_pool <- read_excel("practicum_data.xlsx", sheet = "videos") |>
+  filter(account %in% c(1, 2), !is.na(likes)) |>
+  left_join(pilot_assign, by = "account") |>
+  mutate(cons = if_else(round == 1, Z1, Z2) == 1)
+cons_likes         <- comma(mean(pilot_pool$likes[pilot_pool$cons]))       # conservative-coded
+cockapoo_likes     <- comma(mean(pilot_pool$likes[!pilot_pool$cons]))      # cockapoo
+cons_followers     <- comma(mean(pilot_pool$followers[pilot_pool$cons]))
+cockapoo_followers <- comma(mean(pilot_pool$followers[!pilot_pool$cons]))
+n_pilot_videos     <- nrow(pilot_pool)                                     # 299
+```
+
+# Introduction
+
+Recent anecdotal evidence [@liscomb2025] has alluded to the existence of
+an alt-right "pipeline" on social media platforms, whereby apolitical
+social and/or lifestyle content may contain references to
+ideologically-extreme viewpoints. Though previous research has studied
+how recommendation systems on YouTube [@brown] and Twitter (now X;
+@huszár2022) amplify political content, this study examines one entry
+point to that pipeline: search. Specifically, the project examines
+whether content that aligns with conservative ideological themes, but is
+not itself political, leads platforms to present users with content that
+directly implicates conservative or political beliefs.
+
+This practicum experiment consists of two methodological components: an
+earlier-planned field experiment employing 30 individual accounts on
+TikTok, and a randomized search experiment on YouTube. This dual-pronged
+approach became necessary as only two accounts completed the initial
+design before TikTok blocked logins to every study account and blocked
+the creation of new ones on November 15, 2026. As such, the main content
+of the practicum explores whether, when a user frames an ordinary
+lifestyle search in conservative-coded terms, the platform returns more
+explicitly political content. Therefore, the research hypothesis I am
+testing is as follows:
+
+> **Hypothesis 1:** YouTube searches for lifestyle topics that include a
+> conservative-coded frame ("tradwife") will return more explicitly
+> political videos among the top 20 results than searches for the same
+> kind of topic without the frame.
+
+# Research Design
+
+For this experiment, I collected data on 30 lifestyle search topics,
+chosen before randomization to be ordinary, apolitical searches about
+domestic life, appearance, family and relationships. Each topic
+represented one unit and was searched exactly once, in either its
+treated or its control form. Table 1 lists each topic, its condition,
+and the query used.
+
+```{r tab-design}
+assignments |>
+  arrange(desc(Z), topic) |>
+  transmute(Topic = topic,
+            Condition = ifelse(Z == 1, "Treatment", "Control"),
+            `Query searched` = query,
+            `Search order` = order) |>
+  kable(caption = "Search topics, random assignment, and search order",
+        row.names = FALSE)
+```
+
+Here, the treatment represents a conservative-coded frame added to the
+start of the search query. A treated topic was searched as "tradwife
+*topic*" (for example, "tradwife morning routine"). A control topic was
+searched as the topic alone ("morning routine"). "Tradwife" was used
+because it was the hashtag most associated with conservative gender-role
+content in the pilot \@[@liscomb2025], and it is not itself a political
+term. The two forms of the query were otherwise identical. No covariates
+were collected, as the topic list was fixed before assignment, so
+randomization alone balanced the arms in expectation.
+
+The outcome measured was the number of **explicitly political videos
+among the first 20 video results** on the first results page with the
+"Videos" filter applied, so it represented a count from 0 to 20. Ads,
+channel results, playlists and grouped shelves were excluded. A given
+result was considered to be "explicitly political" if its title, channel
+name or description snippet, as shown on the results page, contained any
+of the following attributes:[^1]
+
+[^1]: Content about gender roles, religion or wellness with no explicit
+    political reference was coded 0. The same rule was used for pilot
+    accounts 2 and 3.
+
+- naming a politician, political party, election, law or government
+  policy, or political movement (such as MAHA or feminism as a
+  movement); or
+- openly arguing a political position.
+
+All 30 searches were run in a single sitting on November 15, 2026. Each
+search loaded YouTube's public results page (`youtube.com/results`),
+with language set to English, region set to the US, and YouTube's
+"Videos" type filter applied) in a fresh, signed-out request that
+carried no cookies, search history or watch history. Each query
+therefore reached YouTube as a new, anonymous visitor. Furthermore, all
+requests came from the same network and device, with the date and time
+of every search also recorded in the data. If a request failed or
+returned fewer than 20 videos, it was repeated after a short pause, up
+to three times, and the number of attempts was recorded. If 20 results
+were not returned, the outcome was counted over the results that were
+returned, and the shortfall was reported.
+
+Assignment used complete random assignment (`complete_ra`) with the
+`randomizr` package on R [@blair2019]. 15 topics were assigned to
+treatment and 15 to control, with no blocking or clustering. The order
+in which the 30 searches are run was also randomized, separately, so
+that time of search was not confounded with treatment.
+
+## Core Assumptions
+
+**Random assignment** is satisfied by the design procedure, which
+employs complete random assignment with a fixed seed to ensure
+replicability.
+
+**Excludability** is satisfied, as the only difference between the two
+conditions is the word "tradwife" in the query, as seen above in
+Table 1. All searches use the same settings, the same time window and
+the same procedure.
+
+**Non-interference** is satisfied given that each request is
+cookie-free, so one search is not expected to change another unit's
+results through search history. All requests shared one IP address and
+ran within a short period, so some interference through network-level
+personalization cannot be ruled out. Running the searches in random
+order should keep any such drift from lining up with treatment.
+
+**Non-compliance** is not expected, as this would entail the failure of
+the YouTube search algorithm to produce any recommended videos in
+response to a given query. As each of the selected topics represents a
+broad topic for which I expect multiple videos to exist, there is no
+supporting evidence to suggest that this would occur.
+
+**Attrition** is not expected because there is no evidence of
+algorithmic refusal to provide any recommendations for social topics on
+YouTube [@brown]. Whereas most social media platforms have implemented
+content restrictions to limit algorithmic behavior from recommending
+topics that may promote norm-violating behaviors or attitudes [@meta],
+there is no supporting evidence to suggest that topics solely
+referencing aspects of daily life would be flagged for such violations.
+
+# Results
+
+Figure 1 reports the frequency distribution for the number of explicitly
+political videos among the top 20 videos recommended by YouTube's
+algorithm. Among neutral queries, i.e., those containing the topic
+alone, the modal value of explicitly political videos out of 20
+recommended was equal to zero (`r sum(y_c == 0)` search terms), with the
+remaining `r sum(y_c == 1)` search terms returning exactly one
+explicitly political video out of the 20 recommended. The total number
+of explicitly political videos recommended in response to neutral
+queries was `r sum_c`.
+
+Meanwhile, among conservative-coded queries, i.e., those containing the
+topic plus the phrase `tradwife`, `r sum(y_t == 0)` search terms
+returned zero explicitly political videos. This indicates that
+`r sum(y_c == 1)` neutral topics and `r sum(y_t >= 1)`
+conservative-coded topics returned at least one explicitly political
+video out of the 20 recommended. The total number of explicitly
+political videos recommended was `r sum_t`. Together, the range of
+values for the number of explicitly political videos within the control
+group was `r max_c`, whereas the range of values for the number of
+explicitly political videos within the treatment group was `r max_t`.
+
+```{r fig-dist, fig.cap="Frequency of Explicitly Political Videos Among Top 20 Recommended"}
+ggplot(dat, aes(x = Y)) +
+  geom_bar() +
+  facet_wrap(~ condition, ncol = 1) +
+  scale_x_continuous(breaks = 0:n_top, limits = c(-0.5, n_top + 0.5)) +
+  theme_bw() +
+  labs(x = "Number of videos",
+       y = "Number of topics")
+```
+
+Table 2 displays the mean number of explicitly political videos among
+the top 20 recommended results on YouTube in the control and treatment
+conditions. Among neutral queries, there were `r mean_c` recommended
+videos on average that contained explicitly political content (*SD* =
+`r sd_c`), comprising around `r pct_c`% of the total videos within this
+condition.
+
+Conversely, among conservative-coded queries, there were `r mean_t`
+recommended videos on average that contained explicitly political
+content (*SD* = `r sd_t`), comprising around `r pct_t`% of the total
+videos within this condition. This indicates that conservative-coded
+queries are more likely to result in the presence of explicitly
+political content within the first 20 recommended videos on YouTube, as
+opposed to neutral queries.
+
+```{r tab-means}
+dat |>
+  group_by(condition) |>
+  summarise(Topics = n(), Mean = mean(Y), SD = sd(Y),
+            Min = min(Y), Max = max(Y), .groups = "drop") |>
+  rename(Condition = condition) |>
+  kable(digits = 2,
+        caption = "Explicitly Political Videos Among Top 20 Recommended, By Condition")
+```
+
+Table 3 summarizes the main results of this experiment, in which I
+estimate the average treatment effect (ATE) of adding the
+conservative-coded frame on the number of explicitly political videos
+among the top 20 results, across the 30 topics. Using a difference in
+means estimator, I find the ATE is `r ate` (*SE* = `r se`), which
+represents a substantial increase in the prevalence of explicitly
+political videos recommended to users. Specifically, on average, the
+treatment group's recommendations contained `r ratio_tc` times more
+explicitly political videos than the control group's recommendations.
+
+I test the statistical significance of this result using a a one-tailed
+randomization inference test under the sharp null hypothesis, which
+states that the effect of conservative-coded queries on the number of
+recommended videos containing explicitly political content is zero for
+all issues included in the sample. As the hypothesis specifies a
+direction of the estimated effect, a one-tailed test is used.
+
+Across 10,000 simulated assignments, the reported p-value for this
+estimate is `r p_ri`, which indicates that the probability of obtaining
+an ATE at least as large as the estimate observed is
+`r fmt(results_table$ri_p_one_tailed * 100)` percent. Notably, the
+conventional two-tailed t-test gives the same conclusion (*p* =
+`r p_t`). Therefore, I can reject the sharp null hypothesis that there
+is no effect for any query.
+
+```{r tab-results}
+data.frame(
+  `ATE`               = results_table$estimate,
+  `SE`                = results_table$std.error,
+  `95% CI`            = sprintf("[%.2f, %.2f]", results_table$conf.low,
+                                results_table$conf.high),
+  `p (one-tailed)` = fmt_p(results_table$ri_p_one_tailed),
+  check.names = FALSE
+) |>
+  kable(digits = 3, row.names = FALSE,
+        caption = paste0("Estimated Average Treatment Effect of Conservative-Coded Framing"))
+```
+
+Figure 2 showcases the randomization inference in graphical form. Here,
+I identify the simulated ATE as `r ate`, with a 95% confidence interval
+of [`r ci_lo`, `r ci_hi`]. This indicates that 95% of all confidence
+intervals simulated under the same schedule of potential outcomes will
+produce an interval containing the true ATE. Since the generated
+confidence interval does not overlap with zero, I can conclude that my
+hypothesis is supported, meaning conservative-coded queries have a
+greater effect on exposure to explicitly political content within the
+first 20 recommended videos on YouTube than neutral queries.
+
+```{r fig-ri, fig.cap="Randomization Inference"}
+plot(ri_h1) +
+  theme_bw() +
+  theme(legend.position = "bottom") +
+  labs(x = "Simulated ATE under the sharp null")
+```
+
+*Note.* Distribution of simulated ATEs under the sharp null of no effect
+(10,000 simulations). The vertical line marks the observed ATE.
+
+Lastly, Figure 3 presents a visualization of the experimental results,
+in the style of (my former advisor) @coppock2021. In comparing the two
+experimental groups, there is a marked increase between neural and
+conservative-coded queries on the mean number of explicitly political
+videos out of the top 20 recommended results on YouTube, which is
+consistent with the earlier-reported findings. Furthermore, the 95%
+confidence intervals do not overlap, suggesting a limited range of
+uncertainty in the estimates.
+
+```{r fig-coppock, fig.cap="Visualization of Explicitly Political Videos Among Top 20 Recommended, By Condition"}
+fit_means <- lm_robust(Y ~ 0 + condition, data = dat)
+means_df <- data.frame(
+  condition = factor(levels(dat$condition), levels = levels(dat$condition)),
+  Y = unname(fit_means$coefficients),
+  conf.low = unname(fit_means$conf.low), conf.high = unname(fit_means$conf.high)
+)
+ggplot(means_df, aes(condition, Y)) +
+  geom_point(data = dat, position = position_jitter(width = 0.15, height = 0.1),
+             alpha = 0.4) +
+  geom_point(size = 3) +
+  geom_errorbar(aes(ymin = conf.low, ymax = conf.high), width = 0) +
+  scale_y_continuous(limits = c(-0.5, n_top), breaks = seq(0, n_top, 2)) +
+  theme_bw() +
+  theme(axis.title.x = element_blank()) +
+  ylab("Explicitly political videos\n(of top 20 YouTube results)")
+```
+
+*Note.* Points are individual topics; black dots are condition means
+with 95% confidence intervals.
+
+# Conclusion
+
+Though recent anecdotal evidence points to an alt-right "pipeline" on
+social media, in which apolitical lifestyle content can carry references
+to ideologically extreme viewpoints, it is unclear how this process
+plays out among everyday users. Therefore, in this experiment, I sought
+to observe this phenomeon by directly testing how searching for
+conservative-coded social content may affect the prevalence of
+explicitly political content recommended by YouTube.
+
+The results support the hypothesis that there is a meaningful
+algorithmic pathway between content that aligns with conservative
+ideological themes and that which directly implicates conservative or
+political beliefs. This means that YouTube searches for lifestyle topics
+that include a conservative-coded frame will return more explicitly
+political videos among the top 20 results than searches for the same
+kind of topic without that frame.
+
+Overall, this project contributes to the nascence of literature that has
+only begun observing the relationship between exposure to social content
+that aligns with conservative ideological themes and the propensity by
+which algorithmic feed designs on YouTube, [@brown], Twitter (now X;
+@huszár2022), and TikTok [@shin2024] present users with social and
+political content that directly implicates conservative ideological
+beliefs. Furthermore, determining whether variations in the amount of
+social media content viewed containing conservative-coded social topics
+alter the algorithm's presentation frequency of explicitly, politically
+conservative content, for instance, may provide fruitful insights into
+the process by which the algorithm is able to generate more accurate
+predictions of user engagement.
+
+\newpage
+
+# References
+
+::: {#refs}
+:::
+
+\newpage
+
+# Appendix A: Data
+
+The below tables represent the full results for each of the assigned
+topics and the range of explicitly-political content identified during
+the experiment. Table 4 denotes the randomly-assigned search order for
+each topic, as well as the relationship between inclusion of the
+conservative-coded phrase `"tradwive"` in the search query and condition
+assignment.
+
+```{r tab-data}
+dat |>
+  arrange(order) |>
+  transmute(`Search order` = order, Query = query,
+            Condition = ifelse(Z == 1, "Treatment", "Control"),
+            `Political (of 20)` = Y) |>
+  kable(caption = "Outcome for each topic, in search order", row.names = FALSE)
+```
+
+Table 5 indicates the specific search query that produced a given video
+coded as explicitly political, its ordered numeric position out of the
+20 videos recommended, and the details as to why the video was coded as
+containing "explicitly political" content.
+
+The coding was done with the help of the Opus 5.5 AI model, developed by
+@anthropic2026. Every result was logged with its link, its text and its
+code, and the reason was recorded for every result coded 1 or judged
+borderline. Additionally, all results coded as 1 were manually reviewed
+to ensure researcher consistency.
+
+```{r tab-political}
+read.csv("search_coding_log.csv") |>
+  filter(political == 1) |>
+  arrange(desc(Z), query, rank) |>
+  transmute(Query = query, Rank = rank,
+            `Reason coded political` = reason) |>
+  kable(format = "pipe", row.names = FALSE,
+        caption = "All results coded explicitly political")
+```
+
+\newpage
+
+# Appendix B: Initial Study (TikTok)
+
+The initial practicum sought to establish 30 new TikTok accounts with no
+followers or following. Each account would like 25 videos for each of
+three hashtags in each of two rounds. Treatment accounts liked videos
+from conservative-coded hashtags (#cleanbeauty, #tradwife, #softliving);
+control accounts liked videos from apolitical cockapoo hashtags
+(#cockapoo, #cockapoosoftiktok, #cockapoolife). Each round was assigned
+by its own independent complete random assignment (15/15). The outcome
+was the number of explicitly political videos among the first 50 "For
+You" videos, measured at baseline, after round 1 and after round 2.
+Version 1 posed two hypotheses:
+
+> **H1:** accounts that interact with conservative-coded content will
+> have more explicitly political content on their "For You" page than
+> accounts that interact with apolitical content.
+>
+> **H2:** accounts that interact with more conservative-coded content
+> overall will have more explicitly political content on their "For You"
+> page than accounts that interact with less.
+
+However, on 2026-11-15, during data collection, TikTok blocked logins to
+every study account and blocked new accounts from being created, so no
+further data could be collected. TikTok gave no reason. A likely factor
+is that all accounts were run from one device and network, which
+platforms commonly treat as coordinated multi-account activity, but this
+cannot be confirmed. Data collection stopped as follows:
+
+| Account | $Z_1$ | $Z_2$ | Waves measured | Liked-video rows | Status             |
+|:-------:|:-----:|:-----:|:--------------:|:----------------:|:-------------------|
+|    1    |   1   |   0   |    0, 1, 2     |    150 / 150     | Complete$^\dagger$ |
+|    2    |   1   |   1   |    0, 1, 2     |    149 / 150     | Complete$^\dagger$ |
+|    3    |   1   |   0   |       0        |     0 / 150      | Baseline only      |
+
+\vspace{-12pt}
+
+Note. Pilot data completeness. Accounts 4–30 have no data.
+$^\dagger$With the deviations listed below.
+
+\bigskip
+
+The following departures from the Version 1 protocol occurred:
+
+1.  **Outcome videos were saved (accounts 1 and 2).** Every "For You"
+    video counted at each wave was also bookmarked to Favorites. That is
+    an engagement signal that may have shaped the next wave's feed.
+2.  **Treatment videos were saved as well as liked (accounts 1 and 2).**
+3.  **Most of account 2's likes did not register.** TikTok's page data
+    shows 58 of 150 treatment videos liked (none in round 2), although
+    all 150 were saved.
+4.  **Account 3's likes did not persist.** The account searched
+    #cleanbeauty and viewed 25 videos. Its likes were confirmed at the
+    time but did not appear in TikTok's data afterwards, and wave 1 was
+    never measured.
+5.  **Account 2's video counts were read after the fact**, on
+    2026-11-15. Values of 10,000 or more are rounded by TikTok.
+6.  **Account 1's coding was done by the researcher** before the coding
+    rule in Part II was written down. Accounts 2 and 3 were coded with
+    that rule.
+7.  **All accounts shared one device and network**, which weakens the
+    assumption that the accounts are independent.
+
+With one complete account per round-2 condition, and every account with
+data assigned to treatment in round 1, H1 and H2 could not be tested.
+Even the smallest possible randomization inference $p$-value was 0.5.
+The pilot results are therefore reported descriptively only.
+
+```{r pilot-analysis}
+p_assign <- read_excel("practicum_data.xlsx", sheet = "assignments") |>
+  select(account, Z1, Z2) |> mutate(rounds = Z1 + Z2)
+p_out    <- read_excel("practicum_data.xlsx", sheet = "outcomes")
+p_videos <- read_excel("practicum_data.xlsx", sheet = "videos")
+
+pilot <- p_assign |> left_join(p_out, by = "account")
+pilot_complete <- pilot |>
+  filter(!is.na(pol_wave0), !is.na(pol_wave1), !is.na(pol_wave2))
+```
+
+The below figure denotes the mean number of explicitly political videos
+observed across each wave:
+
+```{r pilot-traj-plot, fig.cap="Number of Explicitly Political 'For You' Videos Across Waves", fig.height=4.5}
+pilot_complete |>
+  pivot_longer(starts_with("pol_wave"), names_to = "wave",
+               names_prefix = "pol_wave", values_to = "political") |>
+  mutate(account = factor(paste("Account", account, "| Rounds Treated =", rounds))) |>
+  ggplot(aes(wave, political, group = account, linetype = account)) +
+  geom_line() + geom_point(size = 2) +
+  scale_y_continuous(limits = c(0, 50)) + theme_bw() +
+  theme(legend.position = "top", legend.direction = "vertical") +
+  labs(x = "Wave",
+       y = "Explicitly political videos",
+       linetype = NULL)
+```
+
+*Note.* Wave 0 = baseline; Wave 1 = after round 1; Wave 2 = after round
+2. Explicitly political videos measured as function of $n/50$ 'For You'
+videos. Data for Accounts 1 and 2 only.
+
+Elsewhere, I collected a set of descriptive statistics for the following
+values:
+
+- `likes`: This represents the total number of likes (excluding that of
+  the user account) on that video.
+
+- `comments`: This represents the total number of comments (of which the
+  user account will leave none) on that video.
+
+- `followers`: This represents the total number of other accounts
+  (excluding that of the user account) that are following the account
+  which posted the video.
+
+To ensure that there are no potential confounding effects of increased
+time spent on an account's profile page, I collected these measurements
+on a separate device. I created a composite score for likes, comments,
+and followers, respectively, by calculating the mean value across all
+150 videos. I then applied logarithmic transformation to these
+variables. The below table indicates the calculated statistics by
+account and condition:
+
+```{r pilot-videos-table}
+cell <- function(m) sprintf("%s (%.1f)", format(round(m), big.mark = ","), log(m + 1))
+
+p_videos |>
+  filter(account %in% pilot_complete$account, !is.na(likes)) |>
+  left_join(p_assign, by = "account") |>
+  mutate(condition = if_else(if_else(round == 1, Z1, Z2) == 1,
+                             "Conservative", "Cockapoo")) |>
+  group_by(account, round, condition) |>
+  summarise(n = n(),
+            Likes     = cell(mean(likes)),
+            Comments  = cell(mean(comments)),
+            Followers = cell(mean(followers)),
+            .groups = "drop") |>
+  rename(Account = account, Round = round, Content = condition, Videos = n) |>
+  kable(align = "cccrrrr",
+        caption = "Mean Likes, Comments, and Creator Followers for Liked Videos By Account and Round")
+```
+
+*Note.* Logarithmic value of mean provided in parentheses. One Account 2
+video (round 1, #cleanbeauty) was unavailable.
+
+The total sample size of videos watched was `` `r n_pilot_videos` ``.
+Within this sample, videos liked in the cockapoo-coded condition
+averaged `r cockapoo_likes` likes, compared with `r cons_likes` for
+conservative-coded videos, indicating that individuals are seemingly
+less likely to seek out content related to conservative social topics.
+The number of followers was also greater among cockapoo-related content
+creators `` `r cockapoo_followers` ``, compared to conservative-coded
+social content creators, `` `r cons_followers` ``. However, since only
+one out of the four rounds contained cockapoo content, these results are
+somewhat limited in generalizability, as the variance in background
+attributes is likely higher within the group that has a smaller sample
+size; that is, the cockapoo condition.
+
+\newpage
+
+# Appendix C: R Code
+
+```{r code-appendix, ref.label=knitr::all_labels(), echo=TRUE, eval=FALSE}
+```
